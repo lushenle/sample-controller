@@ -1,0 +1,110 @@
+---
+# kubectl create serviceaccount sample-controller-sa --dry-run=client -o yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sample-controller-sa
+  namespace: default
+
+---
+# kubectl create clusterrole sample-controller-role --resource=ingress,events,deployments,service,apps --verb=list,watch,create,update,delete,patch --dry-run=client -o yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sample-controller-role
+  namespace: default
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - events
+      - services
+    verbs:
+      - list
+      - watch
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - list
+      - watch
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - list
+      - watch
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - samplecontroller.shenle.lu
+    resources:
+      - apps
+    verbs:
+      - list
+      - watch
+      - create
+      - update
+      - delete
+      - patch
+
+---
+# kubectl create clusterrolebinding sample-controller-rb --role=sample-controller-role --serviceaccount=default:sample-controller-sa --dry-run=client -o yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sample-controller-rb
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sample-controller-role
+subjects:
+  - kind: ServiceAccount
+    name: sample-controller-sa
+    namespace: default
+
+---
+# kubectl create deployment sample-controller --image=ishenle/sample-controller:4fa2542 --replicas=1 --dry-run=client -o yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: sample-controller
+  name: sample-controller
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sample-controller
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: sample-controller
+    spec:
+      serviceAccountName: sample-controller-sa
+      containers:
+        - image: ishenle/sample-controller:2add834
+          name: sample-controller
+          resources:
+            limits:
+              cpu: 100m
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 20Mi
