@@ -1,14 +1,14 @@
 # sample-controller
 
-This repository implements a simple controller for watching Foo resources as
+This repository implements a simple controller for watching App resources as
 defined with a CustomResourceDefinition (CRD).
 
-**Note:** go-get or vendor this package as `k8s.io/sample-controller`.
+**Note:** go-get or vendor this package as `github.com/lushenle/sample-controller`.
 
 This particular example demonstrates how to perform basic operations such as:
 
-* How to register a new custom resource (custom resource type) of type `Foo` using a CustomResourceDefinition.
-* How to create/get/list instances of your new resource type `Foo`.
+* How to register a new custom resource (custom resource type) of type `App` using a CustomResourceDefinition.
+* How to create/get/list instances of your new resource type `App`.
 * How to setup a controller on resource handling create/update/delete events.
 
 It makes use of the generators in [k8s.io/code-generator](https://github.com/kubernetes/code-generator)
@@ -43,8 +43,8 @@ go about fetching this demo and its dependencies.
 When NOT using go 1.11 modules, you can use the following commands.
 
 ```sh
-go get -d k8s.io/sample-controller
-cd $GOPATH/src/k8s.io/sample-controller
+go get -d github.com/lushenle/sample-controller
+cd $GOPATH/src/github.com/lushenle/sample-controller
 godep restore
 ```
 
@@ -69,7 +69,7 @@ populate the `vendor` directory.
 If you are developing Kubernetes according to
 https://github.com/kubernetes/community/blob/master/contributors/guide/github-workflow.md
 then you already have a copy of this demo in
-`kubernetes/staging/src/k8s.io/sample-controller` and its dependencies
+`kubernetes/staging/src/github.com/lushenle/sample-controller` and its dependencies
 --- including the code generator --- are in usable locations
 (valid for all Go versions).
 
@@ -89,8 +89,8 @@ go build -o sample-controller .
 # create a CustomResourceDefinition
 kubectl create -f artifacts/examples/crd-status-subresource.yaml
 
-# create a custom resource of type Foo
-kubectl create -f artifacts/examples/example-foo.yaml
+# create a custom resource of type App
+kubectl create -f artifacts/examples/example-App.yaml
 
 # check deployments created through the custom resource
 kubectl get deployments
@@ -160,7 +160,7 @@ The [group](https://kubernetes.io/docs/reference/using-api/#api-groups) version 
 
 You can clean up the created CustomResourceDefinition with:
 ```sh
-kubectl delete crd foos.samplecontroller.k8s.io
+kubectl delete crd Apps.samplecontroller.shenle.lu
 ```
 
 ## Compatibility
@@ -171,7 +171,7 @@ k8s.io/client-go.
 ## Where does it come from?
 
 `sample-controller` is synced from
-https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/sample-controller.
+https://github.com/kubernetes/kubernetes/blob/master/staging/src/github.com/lushenle/sample-controller.
 Code changes are made in that location, merged into k8s.io/kubernetes and
 later synced here.
 
