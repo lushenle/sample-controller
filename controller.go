@@ -21,27 +21,32 @@ import (
 	"fmt"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
-	appsinformers "k8s.io/client-go/informers/apps/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	appslisters "k8s.io/client-go/listers/apps/v1"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/record"
-	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog/v2"
-
 	samplev1alpha1 "github.com/lushenle/sample-controller/pkg/apis/samplecontroller/v1alpha1"
 	clientset "github.com/lushenle/sample-controller/pkg/generated/clientset/versioned"
 	samplescheme "github.com/lushenle/sample-controller/pkg/generated/clientset/versioned/scheme"
 	informers "github.com/lushenle/sample-controller/pkg/generated/informers/externalversions/samplecontroller/v1alpha1"
 	listers "github.com/lushenle/sample-controller/pkg/generated/listers/samplecontroller/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
+	appsinformers "k8s.io/client-go/informers/apps/v1"
+	coreinformers "k8s.io/client-go/informers/core/v1"
+	netinformers "k8s.io/client-go/informers/networking/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	appslisters "k8s.io/client-go/listers/apps/v1"
+	corelisters "k8s.io/client-go/listers/core/v1"
+	netlisters "k8s.io/client-go/listers/networking/v1"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog/v2"
 )
 
 const controllerAgentName = "sample-controller"
@@ -70,6 +75,10 @@ type Controller struct {
 
 	deploymentsLister appslisters.DeploymentLister
 	deploymentsSynced cache.InformerSynced
+	serviceLister     corelisters.ServiceLister
+	serviceSynced     cache.InformerSynced
+	ingressLister     netlisters.IngressLister
+	ingressSynced     cache.InformerSynced
 	AppsLister        listers.AppLister
 	AppsSynced        cache.InformerSynced
 
@@ -89,6 +98,8 @@ func NewController(
 	kubeclientset kubernetes.Interface,
 	sampleclientset clientset.Interface,
 	deploymentInformer appsinformers.DeploymentInformer,
+	serviceInformer coreinformers.ServiceInformer,
+	ingressInformer netinformers.IngressInformer,
 	AppInformer informers.AppInformer) *Controller {
 
 	// Create event broadcaster
@@ -106,6 +117,10 @@ func NewController(
 		sampleclientset:   sampleclientset,
 		deploymentsLister: deploymentInformer.Lister(),
 		deploymentsSynced: deploymentInformer.Informer().HasSynced,
+		serviceLister:     serviceInformer.Lister(),
+		serviceSynced:     serviceInformer.Informer().HasSynced,
+		ingressLister:     ingressInformer.Lister(),
+		ingressSynced:     ingressInformer.Informer().HasSynced,
 		AppsLister:        AppInformer.Lister(),
 		AppsSynced:        AppInformer.Informer().HasSynced,
 		workqueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Apps"),
@@ -119,26 +134,6 @@ func NewController(
 		UpdateFunc: func(old, new interface{}) {
 			controller.enqueueApp(new)
 		},
-	})
-	// Set up an event handler for when Deployment resources change. This
-	// handler will lookup the owner of the given Deployment, and if it is
-	// owned by a App resource then the handler will enqueue that App resource for
-	// processing. This way, we don't need to implement custom logic for
-	// handling Deployment resources. More info on this pattern:
-	// https://github.com/kubernetes/community/blob/8cafef897a22026d42f5e5bb3f104febe7e29830/contributors/devel/controllers.md
-	deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: controller.handleObject,
-		UpdateFunc: func(old, new interface{}) {
-			newDepl := new.(*appsv1.Deployment)
-			oldDepl := old.(*appsv1.Deployment)
-			if newDepl.ResourceVersion == oldDepl.ResourceVersion {
-				// Periodic resync will send update events for all known Deployments.
-				// Two different versions of the same Deployment will always have different RVs.
-				return
-			}
-			controller.handleObject(new)
-		},
-		DeleteFunc: controller.handleObject,
 	})
 
 	return controller
@@ -157,7 +152,7 @@ func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 
 	// Wait for the caches to be synced before starting workers
 	klog.Info("Waiting for informer caches to sync")
-	if ok := cache.WaitForCacheSync(stopCh, c.deploymentsSynced, c.AppsSynced); !ok {
+	if ok := cache.WaitForCacheSync(stopCh, c.deploymentsSynced, c.AppsSynced, c.serviceSynced, c.ingressSynced); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
@@ -249,87 +244,64 @@ func (c *Controller) syncHandler(key string) error {
 	}
 
 	// Get the App resource with this namespace/name
-	App, err := c.AppsLister.Apps(namespace).Get(name)
+	app, err := c.AppsLister.Apps(namespace).Get(name)
 	if err != nil {
 		// The App resource may no longer exist, in which case we stop
 		// processing.
 		if errors.IsNotFound(err) {
-			utilruntime.HandleError(fmt.Errorf("App '%s' in work queue no longer exists", key))
+			utilruntime.HandleError(fmt.Errorf("app '%s' in work queue no longer exists", key))
 			return nil
 		}
-
 		return err
 	}
 
-	deploymentName := App.Spec.DeploymentName
-	if deploymentName == "" {
-		// We choose to absorb the error here as the worker would requeue the
-		// resource otherwise. Instead, the next time the resource is updated
-		// the resource will be queued again.
-		utilruntime.HandleError(fmt.Errorf("%s: deployment name must be specified", key))
-		return nil
-	}
-
-	// Get the deployment with the name specified in App.spec
-	deployment, err := c.deploymentsLister.Deployments(App.Namespace).Get(deploymentName)
+	deployment, err := c.deploymentsLister.Deployments(app.Namespace).Get(app.Spec.Deployment.Name)
 	// If the resource doesn't exist, we'll create it
 	if errors.IsNotFound(err) {
-		deployment, err = c.kubeclientset.AppsV1().Deployments(App.Namespace).Create(context.TODO(), newDeployment(App), metav1.CreateOptions{})
+		deployment, err = c.kubeclientset.AppsV1().Deployments(app.Namespace).Create(context.TODO(), newDeployment(app), metav1.CreateOptions{})
+	}
+	if err != nil {
+		return err
 	}
 
-	// If an error occurs during Get/Create, we'll requeue the item so we can
-	// attempt processing again later. This could have been caused by a
-	// temporary network failure, or any other transient reason.
+	service, err := c.serviceLister.Services(app.Namespace).Get(app.Spec.Service.Name)
+	if errors.IsNotFound(err) {
+		service, err = c.kubeclientset.CoreV1().Services(app.Namespace).Create(context.TODO(), newService(app), metav1.CreateOptions{})
+	}
+	if err != nil {
+		return err
+	}
+
+	ingress, err := c.ingressLister.Ingresses(app.Namespace).Get(app.Spec.Ingress.Name)
+	if errors.IsNotFound(err) {
+		ingress, err = c.kubeclientset.NetworkingV1().Ingresses(app.Namespace).Create(context.TODO(), newIngress(app), metav1.CreateOptions{})
+	}
 	if err != nil {
 		return err
 	}
 
 	// If the Deployment is not controlled by this App resource, we should log
 	// a warning to the event recorder and return error msg.
-	if !metav1.IsControlledBy(deployment, App) {
+	if !metav1.IsControlledBy(deployment, app) {
 		msg := fmt.Sprintf(MessageResourceExists, deployment.Name)
-		c.recorder.Event(App, corev1.EventTypeWarning, ErrResourceExists, msg)
+		c.recorder.Event(app, corev1.EventTypeWarning, ErrResourceExists, msg)
 		return fmt.Errorf("%s", msg)
 	}
 
-	// If this number of the replicas on the App resource is specified, and the
-	// number does not equal the current desired replicas on the Deployment, we
-	// should update the Deployment resource.
-	if App.Spec.Replicas != nil && *App.Spec.Replicas != *deployment.Spec.Replicas {
-		klog.V(4).Infof("App %s replicas: %d, deployment replicas: %d", name, *App.Spec.Replicas, *deployment.Spec.Replicas)
-		deployment, err = c.kubeclientset.AppsV1().Deployments(App.Namespace).Update(context.TODO(), newDeployment(App), metav1.UpdateOptions{})
+	if !metav1.IsControlledBy(service, app) {
+		msg := fmt.Sprintf(MessageResourceExists, service.Name)
+		c.recorder.Event(app, corev1.EventTypeWarning, ErrResourceExists, msg)
+		return fmt.Errorf("%s", msg)
 	}
 
-	// If an error occurs during Update, we'll requeue the item so we can
-	// attempt processing again later. This could have been caused by a
-	// temporary network failure, or any other transient reason.
-	if err != nil {
-		return err
+	if !metav1.IsControlledBy(ingress, app) {
+		msg := fmt.Sprintf(MessageResourceExists, ingress.Name)
+		c.recorder.Event(app, corev1.EventTypeWarning, ErrResourceExists, msg)
+		return fmt.Errorf("%s", msg)
 	}
 
-	// Finally, we update the status block of the App resource to reflect the
-	// current state of the world
-	err = c.updateAppStatus(App, deployment)
-	if err != nil {
-		return err
-	}
-
-	c.recorder.Event(App, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
+	c.recorder.Event(app, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 	return nil
-}
-
-func (c *Controller) updateAppStatus(App *samplev1alpha1.App, deployment *appsv1.Deployment) error {
-	// NEVER modify objects from the store. It's a read-only, local cache.
-	// You can use DeepCopy() to make a deep copy of original object and modify this copy
-	// Or create a copy manually for better performance
-	AppCopy := App.DeepCopy()
-	AppCopy.Status.AvailableReplicas = deployment.Status.AvailableReplicas
-	// If the CustomResourceSubresources feature gate is not enabled,
-	// we must use Update instead of UpdateStatus to update the Status block of the App resource.
-	// UpdateStatus will not allow changes to the Spec of the resource,
-	// which is ideal for ensuring nothing other than resource status has been updated.
-	_, err := c.sampleclientset.SamplecontrollerV1alpha1().Apps(App.Namespace).UpdateStatus(context.TODO(), AppCopy, metav1.UpdateOptions{})
-	return err
 }
 
 // enqueueApp takes a App resource and converts it into a namespace/name
@@ -388,21 +360,21 @@ func (c *Controller) handleObject(obj interface{}) {
 // newDeployment creates a new Deployment for a App resource. It also sets
 // the appropriate OwnerReferences on the resource so handleObject can discover
 // the App resource that 'owns' it.
-func newDeployment(App *samplev1alpha1.App) *appsv1.Deployment {
+func newDeployment(app *samplev1alpha1.App) *appsv1.Deployment {
 	labels := map[string]string{
-		"app":        "nginx",
-		"controller": App.Name,
+		"app":        "demo-app",
+		"controller": app.Name,
 	}
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      App.Spec.DeploymentName,
-			Namespace: App.Namespace,
+			Name:      app.Spec.Deployment.Name,
+			Namespace: app.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(App, samplev1alpha1.SchemeGroupVersion.WithKind("App")),
+				*metav1.NewControllerRef(app, samplev1alpha1.SchemeGroupVersion.WithKind("App")),
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: App.Spec.Replicas,
+			Replicas: &app.Spec.Deployment.Replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
@@ -413,8 +385,94 @@ func newDeployment(App *samplev1alpha1.App) *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:  "nginx",
-							Image: "nginx:latest",
+							Name:  app.Spec.Deployment.Name,
+							Image: app.Spec.Deployment.Image,
+							Env: []corev1.EnvVar{
+								{
+									Name:  "HOST",
+									Value: "0.0.0.0",
+								},
+								{
+									Name:  "PORT",
+									Value: "8000",
+								},
+							},
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          "http",
+									Protocol:      corev1.ProtocolTCP,
+									ContainerPort: 8000,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func newService(app *samplev1alpha1.App) *corev1.Service {
+	labels := map[string]string{
+		"app":        "demo-app",
+		"controller": app.Name,
+	}
+
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      app.Spec.Deployment.Name,
+			Namespace: app.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(app, samplev1alpha1.SchemeGroupVersion.WithKind("App")),
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: labels,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http",
+					Protocol:   corev1.ProtocolTCP,
+					Port:       8000,
+					TargetPort: intstr.IntOrString{IntVal: 8000},
+				},
+			},
+		},
+	}
+
+}
+
+func newIngress(app *samplev1alpha1.App) *v1.Ingress {
+	pathPrefix := v1.PathTypePrefix
+	ingressClassName := "nginx"
+	return &v1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      app.Spec.Deployment.Name,
+			Namespace: app.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(app, samplev1alpha1.SchemeGroupVersion.WithKind("App")),
+			},
+		},
+		Spec: v1.IngressSpec{
+			IngressClassName: &ingressClassName,
+			Rules: []v1.IngressRule{
+				{
+					Host: app.Spec.Ingress.Host,
+					IngressRuleValue: v1.IngressRuleValue{
+						HTTP: &v1.HTTPIngressRuleValue{
+							Paths: []v1.HTTPIngressPath{
+								{
+									Path:     "/",
+									PathType: &pathPrefix,
+									Backend: v1.IngressBackend{
+										Service: &v1.IngressServiceBackend{
+											Name: app.Spec.Service.Name,
+											Port: v1.ServiceBackendPort{
+												Number: 8000,
+											},
+										},
+									},
+								},
+							},
 						},
 					},
 				},

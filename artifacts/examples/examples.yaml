@@ -1,0 +1,16 @@
+---
+apiVersion: samplecontroller.shenle.lu/v1alpha1
+kind: App
+metadata:
+  name: shenle-demo-app
+spec:
+  deployment:
+    name: shenle-demo-app
+    replicas: 2
+    image: ishenle/demoapp:v0.3
+  service:
+    name: shenle-demo-svc
+  ingress:
+    name: shenle-demo-ing
+    host: demo.shenle.lu
+status: {}

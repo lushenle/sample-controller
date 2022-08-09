@@ -1,7 +1,0 @@
-apiVersion: samplecontroller.shenle.lu/v1alpha1
-kind: App
-metadata:
-  name: example-App
-spec:
-  deploymentName: example-App
-  replicas: 1
