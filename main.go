@@ -19,13 +19,13 @@ package main
 import (
 	"time"
 
-	"k8s.io/client-go/rest"
-
+	"github.com/lushenle/sample-controller/controller"
 	clientset "github.com/lushenle/sample-controller/pkg/generated/clientset/versioned"
 	informers "github.com/lushenle/sample-controller/pkg/generated/informers/externalversions"
 	"github.com/lushenle/sample-controller/pkg/signals"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 )
@@ -56,7 +56,7 @@ func main() {
 	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
 	appInformerFactory := informers.NewSharedInformerFactory(appClient, time.Second*30)
 
-	controller := NewController(kubeClient, appClient,
+	ctr := controller.NewController(kubeClient, appClient,
 		kubeInformerFactory.Apps().V1().Deployments(),
 		kubeInformerFactory.Core().V1().Services(),
 		kubeInformerFactory.Networking().V1().Ingresses(),
@@ -67,7 +67,7 @@ func main() {
 	kubeInformerFactory.Start(stopCh)
 	appInformerFactory.Start(stopCh)
 
-	if err = controller.Run(2, stopCh); err != nil {
+	if err = ctr.Run(2, stopCh); err != nil {
 		klog.Fatalf("Error running controller: %s", err.Error())
 	}
 }
