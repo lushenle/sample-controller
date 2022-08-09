@@ -67,7 +67,6 @@ spec:
                 type: object
             required:
             - deployment
-            - ingress
             - service
             type: object
           status:

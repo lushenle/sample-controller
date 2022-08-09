@@ -420,7 +420,7 @@ func newService(app *samplev1alpha1.App) *corev1.Service {
 
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      app.Spec.Deployment.Name,
+			Name:      app.Spec.Service.Name,
 			Namespace: app.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(app, samplev1alpha1.SchemeGroupVersion.WithKind("App")),
@@ -446,11 +446,12 @@ func newIngress(app *samplev1alpha1.App) *v1.Ingress {
 	ingressClassName := "nginx"
 	return &v1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      app.Spec.Deployment.Name,
+			Name:      app.Spec.Ingress.Name,
 			Namespace: app.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(app, samplev1alpha1.SchemeGroupVersion.WithKind("App")),
 			},
+			//Annotations: map[string]string{"kubernetes.io/ingress.class": "nginx"},
 		},
 		Spec: v1.IngressSpec{
 			IngressClassName: &ingressClassName,

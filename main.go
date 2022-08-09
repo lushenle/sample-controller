@@ -17,8 +17,9 @@ limitations under the License.
 package main
 
 import (
-	"flag"
 	"time"
+
+	"k8s.io/client-go/rest"
 
 	clientset "github.com/lushenle/sample-controller/pkg/generated/clientset/versioned"
 	informers "github.com/lushenle/sample-controller/pkg/generated/informers/externalversions"
@@ -29,21 +30,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var (
-	masterURL  string
-	kubeconfig string
-)
-
 func main() {
-	klog.InitFlags(nil)
-	flag.Parse()
-
 	// set up signals so we handle the first shutdown signal gracefully
 	stopCh := signals.SetupSignalHandler()
 
-	cfg, err := clientcmd.BuildConfigFromFlags(masterURL, kubeconfig)
+	cfg, err := clientcmd.BuildConfigFromFlags("", clientcmd.RecommendedHomeFile)
 	if err != nil {
-		klog.Fatalf("Error building kubeconfig: %s", err.Error())
+		inClusterConfig, err := rest.InClusterConfig()
+		if err != nil {
+			klog.Fatalf("Error building kubeconfig: %s", err.Error())
+		}
+		cfg = inClusterConfig
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(cfg)
@@ -73,9 +70,4 @@ func main() {
 	if err = controller.Run(2, stopCh); err != nil {
 		klog.Fatalf("Error running controller: %s", err.Error())
 	}
-}
-
-func init() {
-	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to a kubeconfig. Only required if out-of-cluster.")
-	flag.StringVar(&masterURL, "master", "", "The address of the Kubernetes API server. Overrides any value in kubeconfig. Only required if out-of-cluster.")
 }

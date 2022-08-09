@@ -51,7 +51,7 @@ type IngressSpec struct {
 type AppSpec struct {
 	Deployment DeploymentSPec `json:"deployment"`
 	Service    ServiceSpec    `json:"service"`
-	Ingress    IngressSpec    `json:"ingress"`
+	Ingress    IngressSpec    `json:"ingress,omitempty"`
 }
 
 // AppStatus is the status for a App resource
