@@ -28,7 +28,7 @@ import (
 	listers "github.com/lushenle/sample-controller/pkg/generated/listers/samplecontroller/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/networking/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -50,6 +50,8 @@ import (
 )
 
 const controllerAgentName = "sample-controller"
+
+//const maxRetry = 3
 
 const (
 	// SuccessSynced is used as part of the Event 'reason' when a App is synced
@@ -272,14 +274,21 @@ func (c *Controller) syncHandler(key string) error {
 		return err
 	}
 
+	_, ok := service.GetAnnotations()["ingress/http"]
+
 	ingress, err := c.ingressLister.Ingresses(app.Namespace).Get(app.Spec.Ingress.Name)
-	if errors.IsNotFound(err) {
+	if ok && errors.IsNotFound(err) {
+		// create ingress
 		ingress, err = c.kubeclientset.NetworkingV1().Ingresses(app.Namespace).Create(context.TODO(), newIngress(app), metav1.CreateOptions{})
 	}
 	if err != nil {
 		return err
 	}
 
+	if !ok {
+		// delete ingress
+		err = c.kubeclientset.NetworkingV1().Ingresses(app.Namespace).Delete(context.TODO(), ingress.Name, metav1.DeleteOptions{})
+	}
 	// If the Deployment is not controlled by this App resource, we should log
 	// a warning to the event recorder and return error msg.
 	if !metav1.IsControlledBy(deployment, app) {
@@ -294,7 +303,7 @@ func (c *Controller) syncHandler(key string) error {
 		return fmt.Errorf("%s", msg)
 	}
 
-	if !metav1.IsControlledBy(ingress, app) {
+	if ok && !metav1.IsControlledBy(ingress, app) {
 		msg := fmt.Sprintf(MessageResourceExists, ingress.Name)
 		c.recorder.Event(app, corev1.EventTypeWarning, ErrResourceExists, msg)
 		return fmt.Errorf("%s", msg)
@@ -425,6 +434,7 @@ func newService(app *samplev1alpha1.App) *corev1.Service {
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(app, samplev1alpha1.SchemeGroupVersion.WithKind("App")),
 			},
+			Annotations: app.Spec.Service.Annotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: labels,
@@ -432,19 +442,18 @@ func newService(app *samplev1alpha1.App) *corev1.Service {
 				{
 					Name:       "http",
 					Protocol:   corev1.ProtocolTCP,
-					Port:       8000,
-					TargetPort: intstr.IntOrString{IntVal: 8000},
+					Port:       app.Spec.Service.Port,
+					TargetPort: intstr.IntOrString{IntVal: app.Spec.Service.Port},
 				},
 			},
 		},
 	}
-
 }
 
-func newIngress(app *samplev1alpha1.App) *v1.Ingress {
-	pathPrefix := v1.PathTypePrefix
+func newIngress(app *samplev1alpha1.App) *networkingv1.Ingress {
+	pathPrefix := networkingv1.PathTypePrefix
 	ingressClassName := "nginx"
-	return &v1.Ingress{
+	return &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      app.Spec.Ingress.Name,
 			Namespace: app.Namespace,
@@ -453,22 +462,22 @@ func newIngress(app *samplev1alpha1.App) *v1.Ingress {
 			},
 			//Annotations: map[string]string{"kubernetes.io/ingress.class": "nginx"},
 		},
-		Spec: v1.IngressSpec{
+		Spec: networkingv1.IngressSpec{
 			IngressClassName: &ingressClassName,
-			Rules: []v1.IngressRule{
+			Rules: []networkingv1.IngressRule{
 				{
 					Host: app.Spec.Ingress.Host,
-					IngressRuleValue: v1.IngressRuleValue{
-						HTTP: &v1.HTTPIngressRuleValue{
-							Paths: []v1.HTTPIngressPath{
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: []networkingv1.HTTPIngressPath{
 								{
 									Path:     "/",
 									PathType: &pathPrefix,
-									Backend: v1.IngressBackend{
-										Service: &v1.IngressServiceBackend{
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
 											Name: app.Spec.Service.Name,
-											Port: v1.ServiceBackendPort{
-												Number: 8000,
+											Port: networkingv1.ServiceBackendPort{
+												Number: app.Spec.Service.Port,
 											},
 										},
 									},

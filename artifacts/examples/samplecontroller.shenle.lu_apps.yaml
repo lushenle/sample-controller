@@ -4,6 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.2
+  creationTimestamp: null
   name: apps.samplecontroller.shenle.lu
 spec:
   group: samplecontroller.shenle.lu
@@ -60,21 +61,26 @@ spec:
                 type: object
               service:
                 properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
                   name:
                     type: string
+                  port:
+                    format: int32
+                    type: integer
                 required:
+                - annotations
                 - name
+                - port
                 type: object
             required:
             - deployment
             - service
             type: object
-          status:
-            description: AppStatus is the status for a App resource
-            type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true

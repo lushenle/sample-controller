@@ -28,8 +28,7 @@ type App struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AppSpec   `json:"spec"`
-	Status AppStatus `json:"status"`
+	Spec AppSpec `json:"spec"`
 }
 
 type DeploymentSPec struct {
@@ -39,7 +38,9 @@ type DeploymentSPec struct {
 }
 
 type ServiceSpec struct {
-	Name string `json:"name"`
+	Name        string            `json:"name"`
+	Port        int32             `json:"port"`
+	Annotations map[string]string `json:"annotations"`
 }
 
 type IngressSpec struct {
@@ -52,11 +53,6 @@ type AppSpec struct {
 	Deployment DeploymentSPec `json:"deployment"`
 	Service    ServiceSpec    `json:"service"`
 	Ingress    IngressSpec    `json:"ingress,omitempty"`
-}
-
-// AppStatus is the status for a App resource
-type AppStatus struct {
-	//AvailableReplicas int32 `json:"availableReplicas"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

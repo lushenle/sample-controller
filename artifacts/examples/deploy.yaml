@@ -83,7 +83,7 @@ kind: Deployment
 metadata:
   labels:
     app: sample-controller
-  name: sample-controller
+  name: shenle-sample-controller
   namespace: default
 spec:
   replicas: 1

@@ -5,12 +5,14 @@ metadata:
   name: shenle-demo-app
 spec:
   deployment:
-    name: shenle-demo-app
+    name: shenle-demo
     replicas: 2
     image: ishenle/demoapp:v0.3
   service:
-    name: shenle-demo-svc
+    name: shenle-demo
+    port: 8000
+    annotations:
+      ingress/http: "true"
   ingress:
-    name: shenle-demo-ing
+    name: shenle-demo
     host: demo.shenle.lu
-status: {}
