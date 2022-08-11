@@ -71,7 +71,6 @@ spec:
                     format: int32
                     type: integer
                 required:
-                - annotations
                 - name
                 - port
                 type: object

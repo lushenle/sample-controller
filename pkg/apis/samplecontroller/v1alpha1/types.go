@@ -40,7 +40,7 @@ type DeploymentSPec struct {
 type ServiceSpec struct {
 	Name        string            `json:"name"`
 	Port        int32             `json:"port"`
-	Annotations map[string]string `json:"annotations"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 type IngressSpec struct {
